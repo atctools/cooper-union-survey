@@ -173,7 +173,7 @@ footer.credit{margin-top:72px;border-top:1px solid var(--line);padding-top:16px;
 <script>
 (() => {
 "use strict";
-const AUD = ["Prospective Students","Current Students","Families","Alumni","Faculty and staff","Public","Future Employers","Donors","Corporate partners"];
+const AUD = ["Prospective Students","Current Students","Non-degree students","Families","Alumni","Faculty and staff","Public","Future Employers","Donors","Corporate partners"];
 const FUN = ["Pedagogy Experience","Impact","Event Information","Practical Information","Fundraising","Recruitment","Cooper Legacy"];
 const SCHOOLS = ["Albert Nerken School of Engineering","Irwin S. Chanin School of Architecture","School of Art","Faculty of Humanities and Social Sciences","Administration","Other"];
 const ROLES = ["Student","Faculty","Staff","Alumni","Trustee","Other"];
@@ -186,6 +186,15 @@ const fresh = () => ({
   functions: FUN.map(l => ({id:"f-"+slug(l), label:l})),
   links: [], rankA: [], rankF: [], step: 0, submitted: false
 });
+/* Adds default groups that an earlier saved answer predates, in their default position. */
+const withDefaults = st => {
+  const fill = (list, defs, p) => defs.forEach((l, i) => {
+    const id = p + slug(l);
+    if (!list.some(x => x.id === id)) list.splice(Math.min(i, list.length), 0, {id, label:l});
+  });
+  fill(st.audiences, AUD, "a-"); fill(st.functions, FUN, "f-");
+  return st;
+};
 let S = fresh();
 /* Paste the Apps Script web app URL (ends in /exec) between the quotes. */
 const ENDPOINT = "https://script.google.com/a/macros/pentagram.com/s/AKfycbxxpc5Idv2Cysygr4CSTpAtX7lf5YoFlFdIwlXSBvxwnVLBHRj5P60Ov5yIyJkNemowHA/exec";
@@ -227,9 +236,9 @@ function body(){
 }
 async function post(data){
   const opts = {method:"POST", body:JSON.stringify(data), headers:{"Content-Type":"text/plain;charset=utf-8"}};
-  let r;
-  try { r = await fetch(ENDPOINT, opts); }
-  catch (e) { await fetch(ENDPOINT, {...opts, mode:"no-cors"}); return; } // sent, but the browser can't read the reply
+  // Only a readable {ok:true} from the script counts as saved. A sign-in redirect or network error throws.
+  const r = await fetch(ENDPOINT, opts);
+  if (!r.ok) throw new Error("HTTP " + r.status);
   const j = await r.json().catch(() => ({ok:false, error:"Unexpected reply from the Sheet"}));
   if (!j.ok) throw new Error(j.error || "Rejected");
 }
@@ -242,7 +251,7 @@ function sync(){
   saveQ = saveQ.then(() => post(data)).then(() => {
     lastSent = sig; sentOk = true; saveState = "Saved"; paintStatus();
   }).catch(() => {
-    sentOk = false; saveState = "Not saved: check your connection. Your answers are kept on this device."; paintStatus();
+    sentOk = false; saveState = "Not saved: we couldn’t reach the survey. Your answers are kept on this device."; paintStatus();
   });
   return saveQ;
 }
@@ -623,7 +632,7 @@ function renderDone(){
 /* ---------- boot ---------- */
 try {
   const saved = JSON.parse(localStorage.getItem(STORE) || "null");
-  if (saved && saved.S) { S = Object.assign(fresh(), saved.S); rid = saved.rid; }
+  if (saved && saved.S) { S = withDefaults(Object.assign(fresh(), saved.S)); rid = saved.rid; }
 } catch {}
 if (!rid) rid = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 save();
